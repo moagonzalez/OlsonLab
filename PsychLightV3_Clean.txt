@@ -1,0 +1,148 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from skimage.filters import try_all_threshold, threshold_mean
+from skimage import io
+import pandas as pd
+import os
+import tkinter as tk
+from tkinter import filedialog, Tk
+
+
+print('Select BASELINE folder')
+root = Tk() # pointing root to Tk() to use it as Tk() in program.
+root.withdraw() # Hides small tkinter window.
+root.attributes('-topmost', True) # Opened windows will be active. above all windows despite of selection.
+BaseFolder = filedialog.askdirectory() # Returns opened path as str
+BaseFolder = BaseFolder + '/'
+print('Base Folder: ' + BaseFolder)
+
+print('Select TREATED folder')
+root = Tk() # pointing root to Tk() to use it as Tk() in program.
+root.withdraw() # Hides small tkinter window.
+root.attributes('-topmost', True) # Opened windows will be active. above all windows despite of selection.
+TreatedFolder = filedialog.askdirectory() # Returns opened path as str
+TreatedFolder = TreatedFolder + '/'
+print('Treated Folder: '+ TreatedFolder)
+
+print('Select folder to save data in')
+#Filepath for output files
+root = Tk() # pointing root to Tk() to use it as Tk() in program.
+root.withdraw() # Hides small tkinter window.
+root.attributes('-topmost', True) # Opened windows will be active. above all windows despite of selection.
+OutputFolder = filedialog.askdirectory() # Returns opened path as str
+print('Output Folder: ' + OutputFolder)
+ExcelFileName = input('File name for excel output file (.xlsx appended)')
+ExcelFileName = OutputFolder + '/' + ExcelFileName + '.xlsx'
+
+
+
+BaselineFiles = os.listdir(BaseFolder)
+BaseImages=[]
+for f in BaselineFiles:
+    if f.lower().endswith('.tif') is True:
+        BIs = f
+        BaseImages.append(f)
+BaseImages = sorted(BaseImages)
+
+BaseImagesRead=[]
+for f in BaseImages:
+    FilePath = BaseFolder + f
+    BaseImage = io.imread(FilePath)
+    BaseImagesRead.append(BaseImage) 
+plt.imshow(BaseImagesRead[0], cmap='gray')
+plt.show()
+
+BaseThreshold=[]
+for x in BaseImagesRead:
+    BT = threshold_mean(x)
+    BaseThreshold.append(BT)
+
+NumImages = len(BaseImagesRead)
+BaseMask = []
+for y in range(NumImages):
+    BM = BaseImagesRead[y] > BaseThreshold[y]
+    BaseMask.append(BM)
+plt.imshow(BaseMask[0], cmap='gray')
+plt.show()
+
+MaskedBaseImage = []
+for z in range(NumImages):
+    MBI = np.multiply(BaseImagesRead[z], BaseMask[z])
+    MaskedBaseImage.append(MBI)
+plt.imshow(MaskedBaseImage[0], cmap='gray')
+plt.show()
+
+BaseMeanIntensity = []
+for i in MaskedBaseImage:
+    MaskedBaseImageNoZeros = i
+    MaskedBaseImageNoZeros = MaskedBaseImageNoZeros.astype('float')
+    MaskedBaseImageNoZeros[MaskedBaseImageNoZeros == 0] = np.nan
+    BMInt = np.nanmean(MaskedBaseImageNoZeros)
+    BaseMeanIntensity.append(BMInt)
+
+
+TreatmentFiles = os.listdir(TreatedFolder)
+TreatedImages=[]
+for f in TreatmentFiles:
+    if f.lower().endswith('.tif') is True:
+        TIs = f
+        TreatedImages.append(f)
+TreatedImages= sorted(TreatedImages)
+
+TreatedImagesRead=[]
+for i in TreatedImages:
+    TFilePath = TreatedFolder + i
+    TreatedImage = io.imread(TFilePath)
+    TreatedImagesRead.append(TreatedImage) 
+plt.imshow(TreatedImagesRead[0], cmap='gray')
+plt.show()
+
+TreatedThreshold=[]
+for x in TreatedImagesRead:
+    TT = threshold_mean(x)
+    TreatedThreshold.append(TT)
+
+TreatedMask = []
+for y in range(NumImages):
+    TM = TreatedImagesRead[y] > TreatedThreshold[y]
+    TreatedMask.append(TM)
+plt.imshow(TreatedMask[0], cmap='gray')
+plt.show()
+
+MaskedTreatedImage = []
+for z in range(NumImages):
+    MTI = np.multiply(TreatedImagesRead[z], TreatedMask[z])
+    MaskedTreatedImage.append(MTI)
+plt.imshow(MaskedTreatedImage[0], cmap='gray')
+plt.show()
+
+TreatedMeanIntensity = []
+for i in MaskedTreatedImage:
+    MaskedTreatedImageNoZeros = i
+    MaskedTreatedImageNoZeros = MaskedTreatedImageNoZeros.astype('float')
+    MaskedTreatedImageNoZeros[MaskedTreatedImageNoZeros == 0] = np.nan
+    MTInt = np.nanmean(MaskedTreatedImageNoZeros)
+    TreatedMeanIntensity.append(MTInt)
+
+PercentDeltaFOverF = []
+for i in range(NumImages):
+    DeltaF = TreatedMeanIntensity[i] - BaseMeanIntensity[i]
+    DeltaFOverF = DeltaF/BaseMeanIntensity[i]
+    PercentDFF = DeltaFOverF * 100
+    PercentDeltaFOverF.append(PercentDFF)
+
+
+
+
+
+DataIndex = np.arange(NumImages)
+IntensityThresholdData = {'Base Files':BaseImages, 'Base Mean Intensity': BaseMeanIntensity, 'Base Threshold': BaseThreshold,'Treatment Files':TreatedImages, 'Treated Mean Intensity':TreatedMeanIntensity, 'Treated Threshold': TreatedThreshold}
+IntensityThresholdDataTable = pd.DataFrame(IntensityThresholdData, index =[DataIndex], columns= ['Base Files','Base Mean Intensity', 'Base Threshold', 'Treatment Files','Treated Mean Intensity', 'Treated Threshold'])
+
+DeltaFData = {'Base Files':BaseImages, 'Treatment Files':TreatedImages,'Percent DeltaFOverF': PercentDeltaFOverF}
+DeltaFDataTable = pd.DataFrame(DeltaFData, index=[DataIndex], columns=['Base Files', 'Treatment Files', 'Percent DeltaFOverF'])
+
+with pd.ExcelWriter(ExcelFileName) as writer:
+    IntensityThresholdDataTable.to_excel(writer, sheet_name='Intensity_Threshold')
+    DeltaFDataTable.to_excel(writer, sheet_name='Calculations')
+
